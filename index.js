@@ -649,6 +649,82 @@ EL.sendString = function (ip, string) {
 };
 
 
+// 省略したELDATAの形式で指定して送信する
+// ELDATA {
+//   TID : String(4),      // 省略すると自動
+//   SEOJ : String(6),
+//   DEOJ : String(6),
+//   ESV : String(2),
+//   DETAILs: Object
+// }
+// ex.
+// ELDATA {
+//   TID : '0001',      // 省略すると自動
+//   SEOJ : '0ef001',
+//   DEOJ : '029001',
+//   ESV : '61',
+//   DETAILs:  {'80':'31', '8a':'000077'}
+// }
+EL.sendELDATA = function (ip, eldata) {
+	let tid = [];
+	let seoj = [];
+	let deoj = [];
+	let esv = [];
+
+	if( !eldata.TID || !eldata.TID == '') {		// TIDの指定がなければ自動
+		let carry = 0; // 繰り上がり
+		if( EL.tid[1] == 0xff ) {
+			EL.tid[1] = 0;
+			carry = 1;
+		} else {
+			EL.tid[1] += 1;
+		}
+		if( carry == 1 ) {
+			if( EL.tid[0] == 0xff ) {
+				EL.tid[0] = 0;
+			} else {
+				EL.tid[0] += 1;
+			}
+		}
+		tid[0] = EL.tid[0];
+		tid[1] = EL.tid[1];
+	}else{
+		tid = EL.toHexArray( eldata.TID );
+	}
+
+	seoj = EL.toHexArray(eldata.SEOJ);
+	deoj = EL.toHexArray(eldata.DEOJ);
+	esv  = EL.toHexArray(eldata.ESV);
+
+	let buffer;
+	let opc = 0;
+	let pdc = 0;
+	let detail = '';
+
+	for( let epc in eldata.DETAILs ) {
+		if( eldata.DETAILs[epc] == '' ) {  // '' の時は GetやGet_SNA等で存在する、この時はpdc省略
+			detail += epc + '00';
+		}else{
+			pdc = eldata.DETAILs[epc].length / 2;  // Byte数 = 文字数の半分
+			detail += epc + EL.toHexString(pdc) + eldata.DETAILs[epc];
+		}
+		opc += 1;
+	}
+
+	buffer = Buffer.from([
+		0x10, 0x81,
+		// 0x00, 0x00,
+		tid[0], tid[1],
+		seoj[0], seoj[1], seoj[2],
+		deoj[0], deoj[1], deoj[2],
+		esv,
+		opc,
+		EL.toHexArray(detail)].flat(Infinity));
+
+	// データができたので送信する
+	return EL.sendBase(ip, buffer);
+};
+
 //////////////////////////////////////////////////////////////////////
 // EL受信
 //////////////////////////////////////////////////////////////////////
